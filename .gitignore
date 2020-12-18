@@ -1,0 +1,10 @@
+.gradle/
+build/
+.idea/
+logs/
+run/.mixin.out/
+run/crash-reports/
+run/logs/
+run/saves/
+run/mods/
+run/resourcepacks/
