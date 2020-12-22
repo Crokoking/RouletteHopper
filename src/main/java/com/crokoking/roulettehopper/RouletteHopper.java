@@ -1,4 +1,4 @@
-package com.crokoking.shatteredsky;
+package com.crokoking.roulettehopper;
 
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
@@ -19,13 +19,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.stream.Collectors;
 
 // The value here should match an entry in the META-INF/mods.toml file
-@Mod("shatteredsky")
-public class ShatteredSky
+@Mod("roulettehopper")
+public class RouletteHopper
 {
     // Directly reference a log4j logger.
     private static final Logger LOGGER = LogManager.getLogger();
 
-    public ShatteredSky() {
+    public RouletteHopper() {
         // Register the setup method for modloading
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
         // Register the enqueueIMC method for modloading
