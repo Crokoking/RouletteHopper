@@ -9,3 +9,6 @@ run/saves/
 run/mods/
 run/resourcepacks/
 src/generated
+/run/options.txt
+/run/usercache.json
+/run/usernamecache.json
