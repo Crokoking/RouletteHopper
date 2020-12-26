@@ -1,38 +1,50 @@
 package com.crokoking.roulettehopper;
 
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
-import net.minecraft.block.HopperBlock;
+import net.minecraft.block.ChestBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.ItemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.IInventory;
 import net.minecraft.inventory.ISidedInventory;
+import net.minecraft.inventory.ISidedInventoryProvider;
 import net.minecraft.inventory.ItemStackHelper;
 import net.minecraft.inventory.container.Container;
 import net.minecraft.inventory.container.HopperContainer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.CompoundNBT;
-import net.minecraft.tileentity.HopperTileEntity;
+import net.minecraft.tileentity.ChestTileEntity;
 import net.minecraft.tileentity.IHopper;
+import net.minecraft.tileentity.ITickableTileEntity;
+import net.minecraft.tileentity.LockableLootTileEntity;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.Direction;
+import net.minecraft.util.EntityPredicates;
 import net.minecraft.util.NonNullList;
+import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.shapes.IBooleanFunction;
 import net.minecraft.util.math.shapes.VoxelShapes;
 import net.minecraft.util.text.ITextComponent;
 import net.minecraft.util.text.TranslationTextComponent;
+import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
+import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-@SuppressWarnings({"all"})
-public class RouletteHopperTileEntity extends HopperTileEntity {
+public class RouletteHopperTileEntity extends LockableLootTileEntity implements IHopper, ITickableTileEntity {
    private NonNullList<ItemStack> inventory = NonNullList.withSize(5, ItemStack.EMPTY);
    private int transferCooldown = -1;
    private long tickedGameTime;
 
+   public RouletteHopperTileEntity() {
+      super(RouletteHopper.HOPPER_TILE_ENTITY_TYPE.get());
+   }
 
    public void read(BlockState state, CompoundNBT nbt) {
       super.read(state, nbt);
@@ -82,10 +94,9 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
    }
 
    protected ITextComponent getDefaultName() {
-      return new TranslationTextComponent("roulettehopper:container.hopper");
+      return new TranslationTextComponent("container.roulettehopper");
    }
 
-   @Override
    public void tick() {
       if (this.world != null && !this.world.isRemote) {
          --this.transferCooldown;
@@ -102,7 +113,7 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
 
    private boolean updateHopper(Supplier<Boolean> p_200109_1_) {
       if (this.world != null && !this.world.isRemote) {
-         if (!this.isOnTransferCooldown() && this.getBlockState().get(HopperBlock.ENABLED)) {
+         if (!this.isOnTransferCooldown() && this.getBlockState().get(RouletteHopperBlock.ENABLED)) {
             boolean flag = false;
             if (!this.isEmpty()) {
                flag = this.transferItemsOut();
@@ -136,12 +147,12 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
    }
 
    private boolean transferItemsOut() {
-      if (net.minecraftforge.items.VanillaInventoryCodeHooks.insertHook(this)) return true;
+      if (VanillaInventoryCodeHooks.insertHook(this)) return true;
       IInventory iinventory = this.getInventoryForHopperTransfer();
       if (iinventory == null) {
          return false;
       } else {
-         Direction direction = this.getBlockState().get(HopperBlock.FACING).getOpposite();
+         Direction direction = this.getBlockState().get(RouletteHopperBlock.FACING).getOpposite();
          if (this.isInventoryFull(iinventory, direction)) {
             return false;
          } else {
@@ -189,7 +200,7 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
    /**
     * Pull dropped {@link net.minecraft.entity.item.EntityItem EntityItem}s from the world above the hopper and items
     * from any inventory attached to this hopper into the hopper's inventory.
-    *
+    * 
     * @param hopper the hopper in question
     * @return whether any items were successfully added to the hopper
     */
@@ -248,20 +259,145 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
    }
 
    /**
+    * Attempts to place the passed stack in the inventory, using as many slots as required. Returns leftover items
+    */
+   public static ItemStack putStackInInventoryAllSlots(@Nullable IInventory source, IInventory destination, ItemStack stack, @Nullable Direction direction) {
+      if (destination instanceof ISidedInventory && direction != null) {
+         ISidedInventory isidedinventory = (ISidedInventory)destination;
+         int[] aint = isidedinventory.getSlotsForFace(direction);
+
+         for(int k = 0; k < aint.length && !stack.isEmpty(); ++k) {
+            stack = insertStack(source, destination, stack, aint[k], direction);
+         }
+      } else {
+         int i = destination.getSizeInventory();
+
+         for(int j = 0; j < i && !stack.isEmpty(); ++j) {
+            stack = insertStack(source, destination, stack, j, direction);
+         }
+      }
+
+      return stack;
+   }
+
+   /**
+    * Can this hopper insert the specified item from the specified slot on the specified side?
+    */
+   private static boolean canInsertItemInSlot(IInventory inventoryIn, ItemStack stack, int index, @Nullable Direction side) {
+      if (!inventoryIn.isItemValidForSlot(index, stack)) {
+         return false;
+      } else {
+         return !(inventoryIn instanceof ISidedInventory) || ((ISidedInventory)inventoryIn).canInsertItem(index, stack, side);
+      }
+   }
+
+   /**
     * Can this hopper extract the specified item from the specified slot on the specified side?
     */
    private static boolean canExtractItemFromSlot(IInventory inventoryIn, ItemStack stack, int index, Direction side) {
       return !(inventoryIn instanceof ISidedInventory) || ((ISidedInventory)inventoryIn).canExtractItem(index, stack, side);
    }
 
+   /**
+    * Insert the specified stack to the specified inventory and return any leftover items
+    */
+   private static ItemStack insertStack(@Nullable IInventory source, IInventory destination, ItemStack stack, int index, @Nullable Direction direction) {
+      ItemStack itemstack = destination.getStackInSlot(index);
+      if (canInsertItemInSlot(destination, stack, index, direction)) {
+         boolean flag = false;
+         boolean flag1 = destination.isEmpty();
+         if (itemstack.isEmpty()) {
+            destination.setInventorySlotContents(index, stack);
+            stack = ItemStack.EMPTY;
+            flag = true;
+         } else if (canCombine(itemstack, stack)) {
+            int i = stack.getMaxStackSize() - itemstack.getCount();
+            int j = Math.min(stack.getCount(), i);
+            stack.shrink(j);
+            itemstack.grow(j);
+            flag = j > 0;
+         }
+
+         if (flag) {
+            if (flag1 && destination instanceof RouletteHopperTileEntity) {
+               RouletteHopperTileEntity hoppertileentity1 = (RouletteHopperTileEntity)destination;
+               if (!hoppertileentity1.mayTransfer()) {
+                  int k = 0;
+                  if (source instanceof RouletteHopperTileEntity) {
+                     RouletteHopperTileEntity hoppertileentity = (RouletteHopperTileEntity)source;
+                     if (hoppertileentity1.tickedGameTime >= hoppertileentity.tickedGameTime) {
+                        k = 1;
+                     }
+                  }
+
+                  hoppertileentity1.setTransferCooldown(8 - k);
+               }
+            }
+
+            destination.markDirty();
+         }
+      }
+
+      return stack;
+   }
 
    /**
     * Returns the IInventory that this hopper is pointing into
     */
    @Nullable
    private IInventory getInventoryForHopperTransfer() {
-      Direction direction = this.getBlockState().get(HopperBlock.FACING);
+      Direction direction = this.getBlockState().get(RouletteHopperBlock.FACING);
       return getInventoryAtPosition(this.getWorld(), this.pos.offset(direction));
+   }
+
+   /**
+    * Gets the inventory that the provided hopper will transfer items from.
+    */
+   @Nullable
+   public static IInventory getSourceInventory(IHopper hopper) {
+      return getInventoryAtPosition(hopper.getWorld(), hopper.getXPos(), hopper.getYPos() + 1.0D, hopper.getZPos());
+   }
+
+   public static List<ItemEntity> getCaptureItems(IHopper p_200115_0_) {
+      return p_200115_0_.getCollectionArea().toBoundingBoxList().stream().flatMap((p_200110_1_) -> {
+         return p_200115_0_.getWorld().getEntitiesWithinAABB(ItemEntity.class, p_200110_1_.offset(p_200115_0_.getXPos() - 0.5D, p_200115_0_.getYPos() - 0.5D, p_200115_0_.getZPos() - 0.5D), EntityPredicates.IS_ALIVE).stream();
+      }).collect(Collectors.toList());
+   }
+
+   @Nullable
+   public static IInventory getInventoryAtPosition(World p_195484_0_, BlockPos p_195484_1_) {
+      return getInventoryAtPosition(p_195484_0_, (double)p_195484_1_.getX() + 0.5D, (double)p_195484_1_.getY() + 0.5D, (double)p_195484_1_.getZ() + 0.5D);
+   }
+
+   /**
+    * Returns the IInventory (if applicable) of the TileEntity at the specified position
+    */
+   @Nullable
+   public static IInventory getInventoryAtPosition(World worldIn, double x, double y, double z) {
+      IInventory iinventory = null;
+      BlockPos blockpos = new BlockPos(x, y, z);
+      BlockState blockstate = worldIn.getBlockState(blockpos);
+      Block block = blockstate.getBlock();
+      if (block instanceof ISidedInventoryProvider) {
+         iinventory = ((ISidedInventoryProvider)block).createInventory(blockstate, worldIn, blockpos);
+      } else if (blockstate.hasTileEntity()) {
+         TileEntity tileentity = worldIn.getTileEntity(blockpos);
+         if (tileentity instanceof IInventory) {
+            iinventory = (IInventory)tileentity;
+            if (iinventory instanceof ChestTileEntity && block instanceof ChestBlock) {
+               iinventory = ChestBlock.getChestInventory((ChestBlock)block, blockstate, worldIn, blockpos, true);
+            }
+         }
+      }
+
+      if (iinventory == null) {
+         List<Entity> list = worldIn.getEntitiesInAABBexcluding((Entity)null, new AxisAlignedBB(x - 0.5D, y - 0.5D, z - 0.5D, x + 0.5D, y + 0.5D, z + 0.5D), EntityPredicates.HAS_INVENTORY);
+         if (!list.isEmpty()) {
+            iinventory = (IInventory)list.get(worldIn.rand.nextInt(list.size()));
+         }
+      }
+
+      return iinventory;
    }
 
    private static boolean canCombine(ItemStack stack1, ItemStack stack2) {
@@ -335,7 +471,7 @@ public class RouletteHopperTileEntity extends HopperTileEntity {
 
    @Override
    protected net.minecraftforge.items.IItemHandler createUnSidedHandler() {
-      return new net.minecraftforge.items.VanillaHopperItemHandler(this);
+      return new RouletteHopperItemHandler(this);
    }
 
    public long getLastUpdateTime() {

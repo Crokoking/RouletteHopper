@@ -1,6 +1,5 @@
 package com.crokoking.roulettehopper;
 
-import com.mojang.datafixers.types.Type;
 import net.minecraft.block.AbstractBlock;
 import net.minecraft.block.Block;
 import net.minecraft.block.Blocks;
@@ -11,8 +10,6 @@ import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.tileentity.TileEntityType;
-import net.minecraft.util.Util;
-import net.minecraft.util.datafix.TypeReferences;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegistryEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -29,16 +26,13 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.lwjgl.system.CallbackI;
 
-import java.util.Collections;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 // The value here should match an entry in the META-INF/mods.toml file
 @SuppressWarnings("unused")
-@Mod(Main.MODID)
-public class Main
+@Mod(RouletteHopper.MODID)
+public class RouletteHopper
 {
     // Directly reference a log4j logger.
     private static final Logger LOGGER = LogManager.getLogger();
@@ -50,14 +44,14 @@ public class Main
     private static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
     private static final DeferredRegister<TileEntityType<?>> TILE_ENTITIES = DeferredRegister.create(ForgeRegistries.TILE_ENTITIES, MODID);
 
-    private static final RegistryObject<RouletteHopperBlock> HOPPER_BLOCK = BLOCKS.register(BLOCK_NAME, () -> {
+    public static final RegistryObject<RouletteHopperBlock> HOPPER_BLOCK = BLOCKS.register(BLOCK_NAME, () -> {
         AbstractBlock.Properties hopperProperties = AbstractBlock.Properties.create(Material.IRON, MaterialColor.STONE).setRequiresTool().hardnessAndResistance(3.0F, 4.8F).sound(SoundType.METAL).notSolid();
         return new RouletteHopperBlock(hopperProperties);
     });;
-    private static final RegistryObject<BlockItem> HOPPER_ITEM = ITEMS.register(BLOCK_NAME, () -> new BlockItem(HOPPER_BLOCK.get(), (new Item.Properties()).group(ItemGroup.REDSTONE)));;
-    private static final RegistryObject<TileEntityType<RouletteHopperTileEntity>> HOPPER_TILE_ENTITY = TILE_ENTITIES.register(BLOCK_NAME, () -> TileEntityType.Builder.create(RouletteHopperTileEntity::new, HOPPER_BLOCK.get()).build(null));
+    public static final RegistryObject<BlockItem> HOPPER_ITEM = ITEMS.register(BLOCK_NAME, () -> new BlockItem(HOPPER_BLOCK.get(), (new Item.Properties()).group(ItemGroup.REDSTONE)));;
+    public static final RegistryObject<TileEntityType<RouletteHopperTileEntity>> HOPPER_TILE_ENTITY_TYPE = TILE_ENTITIES.register(BLOCK_NAME, () -> TileEntityType.Builder.create(RouletteHopperTileEntity::new, HOPPER_BLOCK.get()).build(null));
 
-    public Main() {
+    public RouletteHopper() {
         // Register the setup method for modloading
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
         // Register the enqueueIMC method for modloading
