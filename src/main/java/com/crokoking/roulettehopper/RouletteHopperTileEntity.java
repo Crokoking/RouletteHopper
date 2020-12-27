@@ -32,6 +32,7 @@ import net.minecraft.util.text.TranslationTextComponent;
 import net.minecraft.world.World;
 
 import javax.annotation.Nullable;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -147,7 +148,7 @@ public class RouletteHopperTileEntity extends LockableLootTileEntity implements 
    }
 
    private boolean transferItemsOut() {
-      if (VanillaInventoryCodeHooks.insertHook(this)) return true;
+      if (RouletteHopperVanillaInventoryCodeHooks.insertHook(this)) return true;
       IInventory iinventory = this.getInventoryForHopperTransfer();
       if (iinventory == null) {
          return false;
@@ -156,16 +157,19 @@ public class RouletteHopperTileEntity extends LockableLootTileEntity implements 
          if (this.isInventoryFull(iinventory, direction)) {
             return false;
          } else {
-            for(int i = 0; i < this.getSizeInventory(); ++i) {
-               if (!this.getStackInSlot(i).isEmpty()) {
-                  ItemStack itemstack = this.getStackInSlot(i).copy();
-                  ItemStack itemstack1 = putStackInInventoryAllSlots(this, iinventory, this.decrStackSize(i, 1), direction);
+            int[] randomSlotIndices = RouletteHopperVanillaInventoryCodeHooks.shuffle(getSizeInventory());
+            //noinspection ForLoopReplaceableByForEach
+            for(int i = 0; i < randomSlotIndices.length; ++i) {
+               int index = randomSlotIndices[i];
+               if (!this.getStackInSlot(index).isEmpty()) {
+                  ItemStack itemstack = this.getStackInSlot(index).copy();
+                  ItemStack itemstack1 = putStackInInventoryAllSlots(this, iinventory, this.decrStackSize(index, 1), direction);
                   if (itemstack1.isEmpty()) {
                      iinventory.markDirty();
                      return true;
                   }
 
-                  this.setInventorySlotContents(i, itemstack);
+                  this.setInventorySlotContents(index, itemstack);
                }
             }
 
@@ -205,14 +209,23 @@ public class RouletteHopperTileEntity extends LockableLootTileEntity implements 
     * @return whether any items were successfully added to the hopper
     */
    public static boolean pullItems(IHopper hopper) {
-      Boolean ret = net.minecraftforge.items.VanillaInventoryCodeHooks.extractHook(hopper);
+      Boolean ret = RouletteHopperVanillaInventoryCodeHooks.extractHook(hopper);
       if (ret != null) return ret;
       IInventory iinventory = getSourceInventory(hopper);
       if (iinventory != null) {
          Direction direction = Direction.DOWN;
-         return isInventoryEmpty(iinventory, direction) ? false : func_213972_a(iinventory, direction).anyMatch((p_213971_3_) -> {
-            return pullItemFromSlot(hopper, iinventory, p_213971_3_, direction);
-         });
+         if(isInventoryEmpty(iinventory, direction)) {
+            return false;
+         }
+         int[] shuffledSlots;
+         if(iinventory instanceof ISidedInventory) {
+            ISidedInventory sidedInventory = (ISidedInventory) iinventory;
+            int[] inventorySlots = sidedInventory.getSlotsForFace(direction);
+            shuffledSlots = RouletteHopperVanillaInventoryCodeHooks.shuffle(Arrays.copyOf(inventorySlots, inventorySlots.length));
+         } else {
+            shuffledSlots = RouletteHopperVanillaInventoryCodeHooks.shuffle(iinventory.getSizeInventory());
+         }
+         return IntStream.of(shuffledSlots).anyMatch((index) -> pullItemFromSlot(hopper, iinventory, index, direction));
       } else {
          for(ItemEntity itementity : getCaptureItems(hopper)) {
             if (captureItem(hopper, itementity)) {
