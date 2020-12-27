@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern":
+  [
+    "i i",
+    "idi",
+    " i "
+  ],
+  "key":
+  {
+    "i":
+    {
+      "tag": "forge:ingots/iron"
+    },
+    "d":
+    {
+      "item": "minecraft:dropper"
+    }
+  },
+  "result":
+  {
+    "item": "roulettehopper:roulettehopper",
+    "count": 1
+  }
+}
